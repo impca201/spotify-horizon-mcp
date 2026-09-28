@@ -349,7 +349,9 @@ class SpotifyClient:
         """Spotify's equivalent of "delete a playlist" — removes it from the
         user's library by unfollowing. The playlist object itself persists on
         Spotify's side but drops out of the user's view."""
-        await self._request("DELETE", f"/playlists/{playlist_id}/followers")
+        await self._request(
+            "DELETE", "/me/library", params={"uris": f"spotify:playlist:{playlist_id}"}
+        )
 
     async def get_my_playlists(self, limit: int = 50) -> list[dict]:
         """Return the authenticated user's playlists (owned + followed).
@@ -375,7 +377,7 @@ class SpotifyClient:
                         "id": p["id"],
                         "name": p["name"],
                         "url": p.get("external_urls", {}).get("spotify"),
-                        "track_count": p.get("tracks", {}).get("total"),
+                        "track_count": (p.get("items") or p.get("tracks") or {}).get("total"),
                         "public": p.get("public"),
                         "owner_id": owner.get("id"),
                         "owner_name": owner.get("display_name"),
@@ -523,9 +525,9 @@ class SpotifyClient:
         ]
 
     async def save_track(self, track: str, save: bool = True) -> None:
-        track_id = self.parse_track_ref(track).rsplit(":", 1)[-1]
+        uri = self.parse_track_ref(track)
         await self._request(
-            "PUT" if save else "DELETE", "/me/tracks", params={"ids": track_id}
+            "PUT" if save else "DELETE", "/me/library", params={"uris": uri}
         )
 
     async def get_recently_played(self, limit: int = 20) -> list[dict]:
@@ -550,7 +552,7 @@ class SpotifyClient:
         data = await self._request(
             "GET",
             f"/playlists/{playlist_id}",
-            params={"fields": "id,name,description,public,collaborative,snapshot_id,owner(id,display_name),tracks(total),external_urls"},
+            params={"fields": "id,name,description,public,collaborative,snapshot_id,owner(id,display_name),items(total),external_urls"},
         )
         owner = data.get("owner", {}) or {}
         return {
@@ -563,7 +565,7 @@ class SpotifyClient:
             "snapshot_id": data.get("snapshot_id"),
             "owner_id": owner.get("id"),
             "owner_name": owner.get("display_name"),
-            "track_count": data.get("tracks", {}).get("total"),
+            "track_count": (data.get("items") or data.get("tracks") or {}).get("total"),
         }
 
     async def get_playlist_tracks(self, playlist_id: str) -> list[dict]:
@@ -579,28 +581,19 @@ class SpotifyClient:
         Requires `playlist-read-private` (and `playlist-read-collaborative`
         for collaborative playlists).
         """
-        # Limit the response payload with `fields` — playlist track responses
-        # are large and most fields are unused by the sync engine.
-        fields = (
-            "next,items("
-            "added_at,is_local,"
-            "track(id,uri,name,duration_ms,external_ids(isrc),"
-            "artists(id,name),album(id,name))"
-            ")"
-        )
         results: list[dict] = []
         offset = 0
         while True:
             data = await self._request(
                 "GET",
-                f"/playlists/{playlist_id}/tracks",
-                params={"limit": 100, "offset": offset, "fields": fields},
+                f"/playlists/{playlist_id}/items",
+                params={"limit": 50, "offset": offset},
             )
             items = data.get("items", []) or []
             if not items:
                 break
             for item in items:
-                track = item.get("track") or {}
+                track = item.get("item") or item.get("track") or {}
                 if item.get("is_local") or not track.get("id"):
                     # Local file or removed/unplayable track — skip; can't sync.
                     continue

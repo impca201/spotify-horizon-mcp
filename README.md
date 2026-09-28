@@ -47,7 +47,7 @@ To run the local HTTP server with credentials in your environment, use `uv run p
 
 ## Limits and troubleshooting
 
-- Spotify Development Mode restricts some endpoints and caps searches at ten results. Some library and playlist endpoints are deprecated and may change; check Spotify's current Web API documentation if they return 403/404. Playback requires Premium and an active device.
+- Spotify Development Mode restricts some endpoints and caps searches at ten results. This fork uses the newer `/me/library` and `/playlists/{id}/items` routes; check Spotify's current Web API documentation if an endpoint returns 403/404. Playback requires Premium and an active device.
 - A Spotify 401 usually means expired or revoked authorization. Repeat bootstrap and replace the refresh token in Horizon. A 403 can mean your Spotify user is absent from User Management or that an endpoint is unavailable in Development Mode.
 - A build error involving `pete-mcp-core` points to the immutable GitHub tarball dependency in `pyproject.toml`; it is a build dependency, not a Spotify credential.
 - The server keeps a rotated refresh token in memory while running. A cold restart after rotation may require a new bootstrap. A successful build alone does not prove a live Spotify API call.

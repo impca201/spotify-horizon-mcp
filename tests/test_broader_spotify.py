@@ -54,9 +54,9 @@ async def test_queue_and_library_use_track_reference(client):
     await client.save_track(track, save=False)
     assert client._request.await_args_list[0].args == ("POST", "/me/player/queue")
     assert client._request.await_args_list[0].kwargs == {"params": {"uri": track}}
-    assert client._request.await_args_list[1].args == ("DELETE", "/me/tracks")
+    assert client._request.await_args_list[1].args == ("DELETE", "/me/library")
     assert client._request.await_args_list[1].kwargs == {
-        "params": {"ids": "1234567890123456789012"}
+        "params": {"uris": track}
     }
 
 

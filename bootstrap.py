@@ -1,12 +1,12 @@
 """One-time Spotify OAuth 2.0 bootstrap helper.
 
-Run this on Pete's local machine (not in the container) after registering a
+Run this on your local machine (not in Horizon) after registering a
 Spotify Developer app. It:
 
   1. Opens the browser to Spotify's authorization page.
   2. Catches the redirect at http://127.0.0.1:8765/callback.
   3. Exchanges the authorization code for an access + refresh token.
-  4. Prints the refresh token for you to paste into .env on nix1.
+  4. Prints the refresh token for you to add as a Horizon secret.
 
 Usage:
 
@@ -23,6 +23,12 @@ Scopes requested:
     playlist-modify-public
     playlist-read-private
     playlist-read-collaborative
+    user-read-playback-state
+    user-modify-playback-state
+    user-read-currently-playing
+    user-read-recently-played
+    user-library-read
+    user-library-modify
 """
 
 import base64
@@ -40,7 +46,10 @@ PORT = 8765
 REDIRECT_URI = f"http://127.0.0.1:{PORT}/callback"
 SCOPES = (
     "playlist-modify-private playlist-modify-public "
-    "playlist-read-private playlist-read-collaborative"
+    "playlist-read-private playlist-read-collaborative "
+    "user-read-playback-state user-modify-playback-state "
+    "user-read-currently-playing user-read-recently-played "
+    "user-library-read user-library-modify"
 )
 AUTH_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"

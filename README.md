@@ -1,14 +1,14 @@
 # Spotify MCP for Prefect Horizon
 
-A personal Spotify MCP server for finding artists and managing playlists. This Horizon-ready fork is based on [pete-builds/mcp-spotify](https://github.com/pete-builds/mcp-spotify), licensed under MIT. It uses FastMCP and the Spotify Web API.
+A personal Spotify MCP server for searching music, controlling playback, reading saved and recent tracks, and managing playlists. This Horizon-ready fork is based on [pete-builds/mcp-spotify](https://github.com/pete-builds/mcp-spotify), licensed under MIT. It uses FastMCP and the Spotify Web API.
 
-Tools: `search_artist`, `get_artist_top_tracks`, `create_playlist_from_artists`, `add_artists_to_playlist`, `create_playlist_from_tracks`, `list_my_playlists`, `get_playlist_metadata`, `list_playlist_tracks`, `update_playlist`, `delete_playlist`, and `remove_tracks_from_playlist`. It does not control playback or read listening history.
+Tools include `search_spotify` (tracks, albums, artists, playlists), `current_playback`, `available_devices`, `play_music`, `pause_music`, `skip_track`, `set_playback_volume`, `playback_queue`, `queue_track`, `liked_songs`, `set_song_liked`, `recently_played`, plus 11 artist and playlist tools from the upstream project. Playback needs Spotify Premium and an active Spotify Connect device.
 
 ## Spotify authorization
 
 1. Create a Web API app at [Spotify for Developers](https://developer.spotify.com/dashboard). Development Mode requires the app owner to have Premium and allows up to five authorized users. Add your Spotify account under **User Management**, even if you own the app.
 2. Add the exact redirect URI `http://127.0.0.1:8765/callback` to the Spotify app.
-3. Run the one-time bootstrap **on your own computer**. It requests `playlist-read-private`, `playlist-modify-private`, and `playlist-modify-public`.
+3. Run the one-time bootstrap **on your own computer**. It requests playlist read/write, playback read/write, recently played, and library read/write scopes. If you previously generated a refresh token with the playlist-only version, rerun bootstrap to grant the added scopes.
 
    ```bash
    export SPOTIFY_CLIENT_ID='your-client-id'
@@ -32,7 +32,7 @@ Set these server environment variables in Horizon:
 
 Enable **Authentication** in Horizon. Horizon then provides an HTTPS MCP endpoint protected for your authorized users. Use its displayed URL when connecting an MCP client. Do not copy the local Docker port or set up a Spotify redirect URL on Horizon: Spotify authorization is completed locally during bootstrap. All tools act on one Spotify account, so limit Horizon access to people who may change that account's playlists.
 
-Tool discovery works before the Spotify variables are set. Tool calls need all three variables. After deployment, list tools and call the read-only `search_artist` tool; verify the response has an artist ID.
+Tool discovery works before the Spotify variables are set. Tool calls need all three variables. After deployment, list tools and call the read-only `search_spotify` tool with a track query; verify the response has a track ID and URI. Then call `current_playback` to check the user's scopes and active device.
 
 ## Local development
 
@@ -47,11 +47,11 @@ To run the local HTTP server with credentials in your environment, use `uv run p
 
 ## Limits and troubleshooting
 
-- Spotify Development Mode restricts some endpoints and caps searches at ten results. The upstream client handles the playlist endpoint changes introduced in February 2026.
+- Spotify Development Mode restricts some endpoints and caps searches at ten results. Some library and playlist endpoints are deprecated and may change; check Spotify's current Web API documentation if they return 403/404. Playback requires Premium and an active device.
 - A Spotify 401 usually means expired or revoked authorization. Repeat bootstrap and replace the refresh token in Horizon. A 403 can mean your Spotify user is absent from User Management or that an endpoint is unavailable in Development Mode.
 - A build error involving `pete-mcp-core` points to the immutable GitHub tarball dependency in `pyproject.toml`; it is a build dependency, not a Spotify credential.
 - The server keeps a rotated refresh token in memory while running. A cold restart after rotation may require a new bootstrap. A successful build alone does not prove a live Spotify API call.
 
 ## License and credit
 
-MIT, with [the upstream license](LICENSE) preserved. Based on [Pete Stergion's mcp-spotify](https://github.com/pete-builds/mcp-spotify). The original tool implementations and tests are credited to the upstream project.
+MIT, with [the upstream license](LICENSE) preserved. Based on [Pete Stergion's mcp-spotify](https://github.com/pete-builds/mcp-spotify). The original artist and playlist tools and tests are credited to the upstream project; this fork adds broader Spotify tools.

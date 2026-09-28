@@ -626,6 +626,132 @@ async def remove_tracks_from_playlist(playlist: str, tracks: list[str]) -> str:
         return _format({"error": str(e)})
 
 
+@mcp.tool(annotations=READ_ONLY)
+@_spotify_errors
+async def search_spotify(query: str, item_type: str = "track", limit: int = 10) -> str:
+    """Search Spotify tracks, albums, artists or playlists. Limit is 1–10."""
+    try:
+        return _format(await spotify.search_catalog(query, item_type, limit))
+    except (SpotifyError, ValueError) as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=READ_ONLY)
+@_spotify_errors
+async def current_playback() -> str:
+    """Get the current track, device and playback state."""
+    try:
+        return _format(await spotify.get_playback_state())
+    except SpotifyError as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=READ_ONLY)
+@_spotify_errors
+async def available_devices() -> str:
+    """List Spotify Connect playback devices."""
+    try:
+        return _format(await spotify.get_devices())
+    except SpotifyError as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=WRITE_IDEMPOTENT)
+@_spotify_errors
+async def play_music(track: str | None = None, device_id: str | None = None) -> str:
+    """Play a Spotify track by URI, URL or ID, or resume playback. Optionally select a device."""
+    try:
+        await spotify.start_playback(track, device_id)
+        return _format({"ok": True, "action": "play"})
+    except (SpotifyError, ValueError) as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=WRITE_IDEMPOTENT)
+@_spotify_errors
+async def pause_music() -> str:
+    """Pause playback on the active Spotify device."""
+    try:
+        await spotify.playback_action("pause")
+        return _format({"ok": True, "action": "pause"})
+    except SpotifyError as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=CREATE)
+@_spotify_errors
+async def skip_track(direction: str = "next") -> str:
+    """Skip to the next or previous track. Direction: next or previous."""
+    try:
+        await spotify.playback_action(direction)
+        return _format({"ok": True, "action": direction})
+    except (SpotifyError, ValueError) as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=WRITE_IDEMPOTENT)
+@_spotify_errors
+async def set_playback_volume(volume_percent: int) -> str:
+    """Set playback volume between 0 and 100 percent."""
+    try:
+        await spotify.set_volume(volume_percent)
+        return _format({"ok": True, "volume_percent": volume_percent})
+    except (SpotifyError, ValueError) as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=READ_ONLY)
+@_spotify_errors
+async def playback_queue() -> str:
+    """Read the currently playing track and upcoming queue."""
+    try:
+        return _format(await spotify.get_queue())
+    except SpotifyError as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=CREATE)
+@_spotify_errors
+async def queue_track(track: str, device_id: str | None = None) -> str:
+    """Add a track URI, URL or ID to the playback queue."""
+    try:
+        await spotify.add_to_queue(track, device_id)
+        return _format({"ok": True, "action": "queue"})
+    except (SpotifyError, ValueError) as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=READ_ONLY)
+@_spotify_errors
+async def liked_songs(limit: int = 20) -> str:
+    """Read up to 50 saved Spotify tracks."""
+    try:
+        return _format(await spotify.get_saved_tracks(limit))
+    except SpotifyError as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=WRITE_IDEMPOTENT)
+@_spotify_errors
+async def set_song_liked(track: str, liked: bool = True) -> str:
+    """Save or remove a track from Your Music using its Spotify URI, URL or ID."""
+    try:
+        await spotify.save_track(track, liked)
+        return _format({"ok": True, "liked": liked})
+    except (SpotifyError, ValueError) as exc:
+        return _format({"error": str(exc)})
+
+
+@mcp.tool(annotations=READ_ONLY)
+@_spotify_errors
+async def recently_played(limit: int = 20) -> str:
+    """Read up to 50 recently played Spotify tracks."""
+    try:
+        return _format(await spotify.get_recently_played(limit))
+    except SpotifyError as exc:
+        return _format({"error": str(exc)})
+
+
 def main() -> None:
     run_server(mcp, default_port=3703, default_transport="streamable-http")
 

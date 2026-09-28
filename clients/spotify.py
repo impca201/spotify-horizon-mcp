@@ -430,6 +430,114 @@ class SpotifyClient:
         items = (data.get("tracks") or {}).get("items", []) or []
         return [_normalize_track(t) for t in items]
 
+    async def search_catalog(
+        self, query: str, item_type: str = "track", limit: int = 10
+    ) -> list[dict]:
+        """Search tracks, albums, artists or playlists within Dev Mode's cap."""
+        if item_type not in {"track", "album", "artist", "playlist"}:
+            raise ValueError("item_type must be track, album, artist or playlist")
+        if not query.strip():
+            raise ValueError("query cannot be empty")
+        data = await self._request(
+            "GET", "/search",
+            params={"q": query.strip(), "type": item_type, "limit": max(1, min(limit, 10))},
+        )
+        collection = (data.get(item_type + "s") or {}).get("items") or []
+        return [
+            {
+                "id": item.get("id"),
+                "uri": item.get("uri"),
+                "name": item.get("name"),
+                "type": item_type,
+                "artists": [a.get("name") for a in item.get("artists") or []],
+                "album": (item.get("album") or {}).get("name"),
+                "url": (item.get("external_urls") or {}).get("spotify"),
+            }
+            for item in collection if item
+        ]
+
+    async def get_playback_state(self) -> dict:
+        data = await self._request("GET", "/me/player")
+        item = data.get("item") or {}
+        return {
+            "is_playing": data.get("is_playing", False),
+            "progress_ms": data.get("progress_ms"),
+            "device": data.get("device"),
+            "track": _normalize_track(item) if item.get("type") == "track" else None,
+            "context": data.get("context"),
+        }
+
+    async def get_devices(self) -> list[dict]:
+        data = await self._request("GET", "/me/player/devices")
+        return data.get("devices") or []
+
+    async def start_playback(
+        self, track: str | None = None, device_id: str | None = None
+    ) -> None:
+        body = {"uris": [self.parse_track_ref(track)]} if track else None
+        params = {"device_id": device_id} if device_id else None
+        await self._request("PUT", "/me/player/play", params=params, json_body=body)
+
+    async def playback_action(self, action: str) -> None:
+        endpoints = {
+            "pause": ("PUT", "/me/player/pause"),
+            "next": ("POST", "/me/player/next"),
+            "previous": ("POST", "/me/player/previous"),
+        }
+        if action not in endpoints:
+            raise ValueError("action must be pause, next or previous")
+        method, path = endpoints[action]
+        await self._request(method, path)
+
+    async def set_volume(self, volume_percent: int) -> None:
+        if not 0 <= volume_percent <= 100:
+            raise ValueError("volume_percent must be between 0 and 100")
+        await self._request(
+            "PUT", "/me/player/volume", params={"volume_percent": volume_percent}
+        )
+
+    async def get_queue(self) -> dict:
+        data = await self._request("GET", "/me/player/queue")
+        return {
+            "currently_playing": _normalize_track(data["currently_playing"])
+            if (data.get("currently_playing") or {}).get("type") == "track" else None,
+            "queue": [
+                _normalize_track(item) for item in data.get("queue") or []
+                if item and item.get("type") == "track"
+            ],
+        }
+
+    async def add_to_queue(self, track: str, device_id: str | None = None) -> None:
+        params = {"uri": self.parse_track_ref(track)}
+        if device_id:
+            params["device_id"] = device_id
+        await self._request("POST", "/me/player/queue", params=params)
+
+    async def get_saved_tracks(self, limit: int = 20) -> list[dict]:
+        data = await self._request(
+            "GET", "/me/tracks", params={"limit": max(1, min(limit, 50))}
+        )
+        return [
+            {"added_at": item.get("added_at"), "track": _normalize_track(item["track"])}
+            for item in data.get("items") or [] if item.get("track")
+        ]
+
+    async def save_track(self, track: str, save: bool = True) -> None:
+        track_id = self.parse_track_ref(track).rsplit(":", 1)[-1]
+        await self._request(
+            "PUT" if save else "DELETE", "/me/tracks", params={"ids": track_id}
+        )
+
+    async def get_recently_played(self, limit: int = 20) -> list[dict]:
+        data = await self._request(
+            "GET", "/me/player/recently-played",
+            params={"limit": max(1, min(limit, 50))},
+        )
+        return [
+            {"played_at": item.get("played_at"), "track": _normalize_track(item["track"])}
+            for item in data.get("items") or [] if item.get("track")
+        ]
+
     async def get_playlist_metadata(self, playlist_id: str) -> dict:
         """Return header-only metadata for a playlist (no track listing).
 

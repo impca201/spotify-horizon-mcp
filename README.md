@@ -30,7 +30,7 @@ Set these server environment variables in Horizon:
 | `SPOTIFY_CLIENT_SECRET` | Spotify app Client Secret (secret) |
 | `SPOTIFY_REFRESH_TOKEN` | Token from `bootstrap.py` (secret) |
 
-Horizon provides the HTTPS MCP endpoint and its own client authentication. Use Horizon's displayed URL and authentication setting when connecting an MCP client. Do not copy the local Docker port or set up a Spotify redirect URL on Horizon: Spotify authorization is completed locally during bootstrap. All tools act on one Spotify account, so limit Horizon access to people who may change that account's playlists.
+Enable **Authentication** in Horizon. Horizon then provides an HTTPS MCP endpoint protected for your authorized users. Use its displayed URL when connecting an MCP client. Do not copy the local Docker port or set up a Spotify redirect URL on Horizon: Spotify authorization is completed locally during bootstrap. All tools act on one Spotify account, so limit Horizon access to people who may change that account's playlists.
 
 Tool discovery works before the Spotify variables are set. Tool calls need all three variables. After deployment, list tools and call the read-only `search_artist` tool; verify the response has an artist ID.
 

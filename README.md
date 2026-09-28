@@ -20,7 +20,7 @@ Tools: `search_artist`, `get_artist_top_tracks`, `create_playlist_from_artists`,
 
 ## Deploy in Prefect Horizon
 
-Connect `impca201/spotify-horizon-mcp` in Horizon and choose its `main` branch. Set the **server path / entrypoint** to `server.py` and the dependency file to `pyproject.toml`. Use Python 3.13 if Horizon asks for a runtime; the project supports Python 3.11 or newer.
+Connect `impca201/spotify-horizon-mcp` in Horizon and choose its `main` branch. Set the **entrypoint** to `server.py:mcp`. Horizon detects dependencies from `pyproject.toml`. Use Python 3.13 if Horizon asks for a runtime; the project supports Python 3.11 or newer.
 
 Set these server environment variables in Horizon:
 

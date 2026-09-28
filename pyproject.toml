@@ -45,9 +45,9 @@ dev = [
 mcp-spotify = "server:main"
 
 [project.urls]
-Homepage = "https://github.com/pete-builds/mcp-spotify"
-Repository = "https://github.com/pete-builds/mcp-spotify"
-Issues = "https://github.com/pete-builds/mcp-spotify/issues"
+Homepage = "https://github.com/impca201/spotify-horizon-mcp"
+Repository = "https://github.com/impca201/spotify-horizon-mcp"
+Issues = "https://github.com/impca201/spotify-horizon-mcp/issues"
 
 [tool.hatch.metadata]
 # Required for the pete-mcp-core commit-tarball pin above. Can be dropped

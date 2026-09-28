@@ -1,133 +1,57 @@
-# mcp-spotify
+# Spotify MCP for Prefect Horizon
 
-A Spotify MCP server designed to run as a **remote service** over Streamable HTTP — not a local stdio subprocess.
+A personal Spotify MCP server for finding artists and managing playlists. This Horizon-ready fork is based on [pete-builds/mcp-spotify](https://github.com/pete-builds/mcp-spotify), licensed under MIT. It uses FastMCP and the Spotify Web API.
 
-Most Spotify MCP servers today ([varunneal/spotify-mcp](https://github.com/varunneal/spotify-mcp), [marcelmarais/spotify-mcp-server](https://github.com/marcelmarais/spotify-mcp-server), etc.) launch as a subprocess on the same machine as your AI client. If you have more than one machine — a homelab, a shared dev server, a laptop that moves around — you end up running N copies with N separate OAuth flows.
+Tools: `search_artist`, `get_artist_top_tracks`, `create_playlist_from_artists`, `add_artists_to_playlist`, `create_playlist_from_tracks`, `list_my_playlists`, `get_playlist_metadata`, `list_playlist_tracks`, `update_playlist`, `delete_playlist`, and `remove_tracks_from_playlist`. It does not control playback or read listening history.
 
-This server runs **once**, in a Docker container, exposes Spotify tools over Streamable HTTP on a port, and any MCP client on your LAN or Tailscale network connects to it with one URL. OAuth happens once in a bootstrap script; the refresh token lives on the server.
+## Spotify authorization
 
-> Previously published as `spotify-mcp-sse`. Renamed to `mcp-spotify` on the migration from the deprecated HTTP+SSE transport to Streamable HTTP (MCP spec 2025-06-18). The old URL `https://github.com/pete-builds/spotify-mcp-sse` redirects to this repo.
+1. Create a Web API app at [Spotify for Developers](https://developer.spotify.com/dashboard). Development Mode requires the app owner to have Premium and allows up to five authorized users. Add your Spotify account under **User Management**, even if you own the app.
+2. Add the exact redirect URI `http://127.0.0.1:8765/callback` to the Spotify app.
+3. Run the one-time bootstrap **on your own computer**. It requests `playlist-read-private`, `playlist-modify-private`, and `playlist-modify-public`.
 
-## Features
+   ```bash
+   export SPOTIFY_CLIENT_ID='your-client-id'
+   export SPOTIFY_CLIENT_SECRET='your-client-secret'
+   python3 bootstrap.py
+   ```
 
-Nine tools, oriented around creating and managing playlists:
+4. Copy the refresh token displayed by the script into Horizon's secret environment variable field. Do not commit it or paste it into chat. Spotify refresh tokens require reauthorization after six months; rerun bootstrap and update the Horizon secret when needed.
 
-| Tool | Purpose |
-|---|---|
-| `search_artist` | Resolve artist name → Spotify ID for disambiguation |
-| `get_artist_top_tracks` | Artist's most popular tracks (works around the deprecated `/top-tracks` endpoint) |
-| `create_playlist_from_artists` | Build a new playlist from a list of artist names; shuffle interleaves |
-| `add_artists_to_playlist` | Extend an existing playlist; accepts URL, URI, ID, or exact name |
-| `create_playlist_from_tracks` | Build a playlist from specific track URIs you already have |
-| `list_my_playlists` | List playlists you own or follow |
-| `update_playlist` | Rename, edit description, toggle public |
-| `delete_playlist` | Remove from your library (Spotify's "unfollow") |
-| `remove_tracks_from_playlist` | Remove specific tracks |
+## Deploy in Prefect Horizon
 
-## Feb 2026 Spotify API migration — why this matters
+Connect `impca201/spotify-horizon-mcp` in Horizon and choose its `main` branch. Set the **server path / entrypoint** to `server.py` and the dependency file to `pyproject.toml`. Use Python 3.13 if Horizon asks for a runtime; the project supports Python 3.11 or newer.
 
-Spotify shipped a breaking API migration on Feb 11, 2026. If you built a Spotify integration before then and haven't touched it since, it's broken. If you're starting a new one now, Spotify's dashboard quietly puts you in "Development Mode" with severe restrictions. This repo documents and works around all of it:
+Set these server environment variables in Horizon:
 
-- `/artists/{id}/top-tracks` returns 403 for new apps → falls back to track search with `artist:` filter
-- Artist search with `limit=1` returns the *wrong* artist (e.g. `Radiohead` → `Thom Yorke`) → always requests ≥2 and prefers exact name match
-- Search `limit` caps at 10 (docs still say 50) → clamps internally
-- `POST /users/{id}/playlists` removed → uses `POST /me/playlists`
-- `POST /playlists/{id}/tracks` → renamed to `/items` (takes `{"uris": [...]}`)
-- `DELETE /playlists/{id}/items` takes a *different* shape: `{"items": [{"uri": "..."}]}`
-- Write operations require the authenticating user to be explicitly added to the app's User Management tab in the Spotify Developer dashboard (even the app creator)
+| Name | Value |
+| --- | --- |
+| `SPOTIFY_CLIENT_ID` | Spotify app Client ID |
+| `SPOTIFY_CLIENT_SECRET` | Spotify app Client Secret (secret) |
+| `SPOTIFY_REFRESH_TOKEN` | Token from `bootstrap.py` (secret) |
 
-## Quick start
+Horizon provides the HTTPS MCP endpoint and its own client authentication. Use Horizon's displayed URL and authentication setting when connecting an MCP client. Do not copy the local Docker port or set up a Spotify redirect URL on Horizon: Spotify authorization is completed locally during bootstrap. All tools act on one Spotify account, so limit Horizon access to people who may change that account's playlists.
 
-### 1. Register a Spotify app
+Tool discovery works before the Spotify variables are set. Tool calls need all three variables. After deployment, list tools and call the read-only `search_artist` tool; verify the response has an artist ID.
 
-https://developer.spotify.com/dashboard → Create app.
-
-- Redirect URI: `http://127.0.0.1:8765/callback` (exact — case-sensitive, no trailing slash)
-- API: Web API
-- Save **Client ID** and **Client Secret**
-
-In the app's Settings → User Management, add yourself (name + the email on your Spotify account). This is required for any write operations.
-
-### 2. One-time OAuth bootstrap (on your local machine)
+## Local development
 
 ```bash
-git clone https://github.com/pete-builds/mcp-spotify
-cd mcp-spotify
-export SPOTIFY_CLIENT_ID=...
-export SPOTIFY_CLIENT_SECRET=...
-python3 bootstrap.py
+uv venv --python 3.13
+uv pip install --python .venv/bin/python -r requirements.lock
+uv pip install --python .venv/bin/python -e '.[dev]'
+uv run pytest
 ```
 
-Your browser opens, you authorize, the terminal prints a long-lived refresh token.
+To run the local HTTP server with credentials in your environment, use `uv run python server.py`. The upstream Docker setup is retained for local use. Horizon imports the `mcp` instance in `server.py` directly.
 
-### 3. Deploy the server
+## Limits and troubleshooting
 
-Copy the code to whatever host will run the container (typically a homelab box, LAN-accessible). Write `.env`:
+- Spotify Development Mode restricts some endpoints and caps searches at ten results. The upstream client handles the playlist endpoint changes introduced in February 2026.
+- A Spotify 401 usually means expired or revoked authorization. Repeat bootstrap and replace the refresh token in Horizon. A 403 can mean your Spotify user is absent from User Management or that an endpoint is unavailable in Development Mode.
+- A build error involving `pete-mcp-core` points to the immutable GitHub tarball dependency in `pyproject.toml`; it is a build dependency, not a Spotify credential.
+- The server keeps a rotated refresh token in memory while running. A cold restart after rotation may require a new bootstrap. A successful build alone does not prove a live Spotify API call.
 
-```
-SPOTIFY_CLIENT_ID=...
-SPOTIFY_CLIENT_SECRET=...
-SPOTIFY_REFRESH_TOKEN=...
-```
+## License and credit
 
-Start it:
-
-```bash
-docker compose up -d --build
-```
-
-Server is now at `http://<host>:3703/mcp` (Streamable HTTP).
-
-### 4. Register with your MCP client
-
-Claude Code:
-
-```bash
-claude mcp add spotify http://<host>:3703/mcp --transport http --scope user
-```
-
-Any other MCP client that supports Streamable HTTP: point it at the same URL.
-
-## Configuration
-
-Environment variables (all optional except credentials):
-
-| Var | Default | Purpose |
-|---|---|---|
-| `SPOTIFY_CLIENT_ID` | — | From Spotify Developer dashboard (required) |
-| `SPOTIFY_CLIENT_SECRET` | — | From Spotify Developer dashboard (required) |
-| `SPOTIFY_REFRESH_TOKEN` | — | From `bootstrap.py` (required) |
-| `MCP_HOST` | `0.0.0.0` | Bind address |
-| `MCP_PORT` | `3703` | Listening port |
-
-The included `docker-compose.yml` uses `network_mode: host`. If you'd rather expose with a port mapping, replace that with:
-
-```yaml
-    ports:
-      - "3703:3703"
-```
-
-## OAuth scopes
-
-Bootstrap requests these:
-
-- `playlist-modify-private`
-- `playlist-modify-public`
-- `playlist-read-private`
-
-If you add tools that need more (e.g. `user-top-read` for "my listening history"), extend `SCOPES` in `bootstrap.py` and re-run it; you'll get a fresh refresh token with the new permissions.
-
-## Architecture
-
-- [FastMCP](https://github.com/jlowin/fastmcp) over Streamable HTTP transport (MCP spec 2025-06-18)
-- [httpx](https://www.python-httpx.org/) async client with in-memory access-token cache and automatic refresh on 401 or expiry
-- Stdlib-only bootstrap helper (`http.server`, `webbrowser`, `urllib`) — no extra deps for the one-time OAuth dance
-- `python:3.13-slim` base image, `fastmcp==3.1.0`, `httpx==0.28.1`
-
-## License
-
-MIT. See [LICENSE](./LICENSE).
-
-## Credits
-
-Built by [Pete Stergion](https://brooksnewmedia.com) as part of Brooks New Media's homelab toolkit. The Feb 2026 API workarounds were hard-won; PRs welcome if you spot a cleaner approach.
+MIT, with [the upstream license](LICENSE) preserved. Based on [Pete Stergion's mcp-spotify](https://github.com/pete-builds/mcp-spotify). The original tool implementations and tests are credited to the upstream project.

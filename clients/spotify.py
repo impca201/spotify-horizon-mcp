@@ -119,6 +119,11 @@ class SpotifyClient:
             self._refresh_token = data["refresh_token"]
 
     async def _ensure_token(self):
+        if not all((self._client_id, self._client_secret, self._refresh_token)):
+            raise SpotifyError(
+                "Set SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET and "
+                "SPOTIFY_REFRESH_TOKEN in Horizon before calling tools."
+            )
         if self._access_token and time.time() < self._expires_at - 60:
             return
         async with self._token_lock:

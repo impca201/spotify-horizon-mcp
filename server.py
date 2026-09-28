@@ -9,7 +9,6 @@ See bootstrap.py for the one-time token acquisition procedure.
 """
 
 import logging
-import sys
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -51,8 +50,7 @@ class SpotifySettings(BaseCoreSettings):
 try:
     settings = SpotifySettings()
 except ValidationError as exc:
-    print(f"FATAL: invalid configuration: {exc}", file=sys.stderr)
-    sys.exit(1)
+    raise RuntimeError(f"Invalid Spotify MCP configuration: {exc}") from exc
 
 configure_logging(
     settings.log_level,
@@ -71,13 +69,9 @@ missing = [
     if not value
 ]
 if missing:
-    log.critical("Missing required environment variables: %s", ", ".join(missing))
-    log.critical(
-        "Copy .env.example to .env, register a Spotify app at "
-        "https://developer.spotify.com/dashboard, then run bootstrap.py "
-        "locally to obtain SPOTIFY_REFRESH_TOKEN."
-    )
-    sys.exit(1)
+    # Horizon imports this module to inspect tools before secrets are configured.
+    # SpotifyClient performs no network request until a tool runs.
+    log.warning("Spotify credentials needed for tool calls: %s", ", ".join(missing))
 
 # --- Initialize client ---
 spotify = SpotifyClient(

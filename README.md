@@ -10,16 +10,38 @@ Tools include `search_spotify` (tracks, albums, artists, playlists), `current_pl
 2. Add the exact redirect URI `http://127.0.0.1:8765/callback` to the Spotify app.
 3. Run the one-time bootstrap **on your own computer**, from a local copy of this repository. It needs only Python 3; no project dependencies or Docker are needed for this step. It requests playlist read/write, playback read/write, recently played, and library read/write scopes. If you previously generated a refresh token with the playlist-only version, rerun bootstrap to grant the added scopes.
 
-   On Windows, clone the repository with GitHub Desktop, open its folder in File Explorer, type `powershell` in the Explorer address bar and press Enter. Check Python with `py -3 --version`, then run:
+   **Windows (PowerShell):** Clone [this repository](https://github.com/impca201/spotify-horizon-mcp) with GitHub Desktop, or use **Fetch origin / Pull origin** if you already cloned it. In GitHub Desktop, choose **Repository → Show in Explorer**. In File Explorer, click the address bar, type `powershell`, and press Enter. The prompt should show the repository folder (for example, `PS C:\Apps\GitHub\spotify-horizon-mcp>`).
+
+   Run the following steps **one at a time**. When a command asks for input, enter the requested *value* and press Enter before copying the next command. Do not paste the entire block of commands at once: a `Read-Host` prompt may take the next command as your credential.
+
+   First, check that Python works:
+
+   ```powershell
+   python --version
+   ```
+
+   If it prints a Python 3 version, continue. The `py` launcher is optional; if `py -3 --version` says the command is not recognized, use `python` as shown here.
+
+   Enter **only this command**, then wait for the `Spotify Client ID:` prompt. Paste the Client ID from your Spotify Developer app and press Enter:
 
    ```powershell
    $env:SPOTIFY_CLIENT_ID = Read-Host "Spotify Client ID"
-   $secret = Read-Host "Spotify Client Secret" -AsSecureString
-   $env:SPOTIFY_CLIENT_SECRET = [System.Net.NetworkCredential]::new("", $secret).Password
-   py -3 .\bootstrap.py
    ```
 
-   If `py` is unavailable but `python --version` works, use `python .\bootstrap.py`. These variables exist only in that PowerShell session. The script opens your browser and briefly listens on `127.0.0.1:8765` for Spotify's redirect.
+   Enter **only this command**, then wait for the `Spotify Client Secret:` prompt. Paste the Client Secret and press Enter. The secret does not appear while you type or paste it:
+
+   ```powershell
+   $secret = Read-Host "Spotify Client Secret" -AsSecureString
+   ```
+
+   Now run these commands, pressing Enter after each line:
+
+   ```powershell
+   $env:SPOTIFY_CLIENT_SECRET = [System.Net.NetworkCredential]::new("", $secret).Password
+   python .\bootstrap.py
+   ```
+
+   The script opens a browser for Spotify authorization and briefly listens on `127.0.0.1:8765` for the redirect. Approve the requested scopes, then return to PowerShell for the refresh token. If it says `ERROR: set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in env`, repeat the commands above one at a time, waiting for each prompt; keep the same PowerShell window open. These environment variables exist only in that window. Do not paste credentials or the token into chat, screenshots, or a Git commit.
 
    On macOS/Linux, run these commands from the cloned repository:
 

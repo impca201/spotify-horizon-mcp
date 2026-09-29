@@ -8,7 +8,20 @@ Tools include `search_spotify` (tracks, albums, artists, playlists), `current_pl
 
 1. Create a Web API app at [Spotify for Developers](https://developer.spotify.com/dashboard). Development Mode requires the app owner to have Premium and allows up to five authorized users. Add your Spotify account under **User Management**, even if you own the app.
 2. Add the exact redirect URI `http://127.0.0.1:8765/callback` to the Spotify app.
-3. Run the one-time bootstrap **on your own computer**. It requests playlist read/write, playback read/write, recently played, and library read/write scopes. If you previously generated a refresh token with the playlist-only version, rerun bootstrap to grant the added scopes.
+3. Run the one-time bootstrap **on your own computer**, from a local copy of this repository. It needs only Python 3; no project dependencies or Docker are needed for this step. It requests playlist read/write, playback read/write, recently played, and library read/write scopes. If you previously generated a refresh token with the playlist-only version, rerun bootstrap to grant the added scopes.
+
+   On Windows, clone the repository with GitHub Desktop, open its folder in File Explorer, type `powershell` in the Explorer address bar and press Enter. Check Python with `py -3 --version`, then run:
+
+   ```powershell
+   $env:SPOTIFY_CLIENT_ID = Read-Host "Spotify Client ID"
+   $secret = Read-Host "Spotify Client Secret" -AsSecureString
+   $env:SPOTIFY_CLIENT_SECRET = [System.Net.NetworkCredential]::new("", $secret).Password
+   py -3 .\bootstrap.py
+   ```
+
+   If `py` is unavailable but `python --version` works, use `python .\bootstrap.py`. These variables exist only in that PowerShell session. The script opens your browser and briefly listens on `127.0.0.1:8765` for Spotify's redirect.
+
+   On macOS/Linux, run these commands from the cloned repository:
 
    ```bash
    export SPOTIFY_CLIENT_ID='your-client-id'

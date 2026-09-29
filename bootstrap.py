@@ -157,12 +157,11 @@ def main():
         sys.exit(1)
 
     print("\n" + "=" * 60)
-    print("SUCCESS. Paste this into .env on nix1 as SPOTIFY_REFRESH_TOKEN:")
+    print("SUCCESS. Add this as SPOTIFY_REFRESH_TOKEN in Horizon:")
     print("=" * 60)
     print(refresh)
     print("=" * 60)
-    print(f"\nAccess token (valid for {tokens.get('expires_in', 3600)}s, just for sanity):")
-    print(tokens.get("access_token"))
+    print("\nKeep this token private. You do not need the access token.")
 
 
 if __name__ == "__main__":

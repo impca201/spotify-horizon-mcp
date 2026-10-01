@@ -42,7 +42,17 @@ jobs:
           import asyncio, server
           tools = asyncio.run(server.mcp.list_tools())
           names = sorted(t.name for t in tools)
-          assert len(names) == 11, names
+          # Presence, not an exact count: a count breaks on every added tool.
+          core = {
+              'search_artist', 'get_artist_top_tracks', 'create_playlist_from_artists',
+              'add_artists_to_playlist', 'create_playlist_from_tracks',
+              'list_my_playlists', 'get_playlist_metadata', 'list_playlist_tracks',
+              'update_playlist', 'delete_playlist', 'remove_tracks_from_playlist',
+              'search_spotify', 'play_music', 'current_playback', 'liked_songs',
+              'get_album', 'save_to_library', 'top_items',
+          }
+          missing = core - set(names)
+          assert not missing, sorted(missing)
           print('tools:', names)
           "
 

@@ -287,3 +287,42 @@ async def test_tool_shapes_spotify_errors_as_json(monkeypatch):
     monkeypatch.setattr(server, "spotify", fake)
     out = json.loads(await _fn(server.top_items)())
     assert "403" in out["error"]
+
+
+# ---- update_playlist reports what Spotify actually did ----
+
+
+def _playlist_fake(actual):
+    fake = AsyncMock()
+    fake.resolve_playlist.return_value = {"id": "pl", "name": "P", "url": "u"}
+    fake.get_playlist_metadata.return_value = actual
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_update_playlist_reads_back_and_warns_on_mismatch(monkeypatch):
+    # Spotify said OK but left the playlist public.
+    fake = _playlist_fake({"name": "P", "description": "", "public": True, "collaborative": True})
+    monkeypatch.setattr(server, "spotify", fake)
+    out = json.loads(await _fn(server.update_playlist)("P", public=False, collaborative=True))
+    assert out["current"]["public"] is True
+    assert out["mismatch"] == {"public": {"requested": False, "actual": True}}
+    assert "warning" in out
+
+
+@pytest.mark.asyncio
+async def test_update_playlist_has_no_warning_when_state_matches(monkeypatch):
+    fake = _playlist_fake({"name": "New", "description": None, "public": False, "collaborative": False})
+    monkeypatch.setattr(server, "spotify", fake)
+    out = json.loads(await _fn(server.update_playlist)("P", new_name="New", public=False))
+    assert "warning" not in out and out["requested"] == {"name": "New", "public": False}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("public", [None, True])
+async def test_collaborative_requires_explicit_private(monkeypatch, public):
+    fake = _playlist_fake({})
+    monkeypatch.setattr(server, "spotify", fake)
+    out = json.loads(await _fn(server.update_playlist)("P", public=public, collaborative=True))
+    assert "public=False" in out["error"]
+    fake.update_playlist.assert_not_awaited()

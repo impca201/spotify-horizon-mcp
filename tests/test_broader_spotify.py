@@ -78,4 +78,5 @@ async def test_current_playback_handles_no_active_device(client):
     assert await client.get_playback_state() == {
         "is_playing": False, "progress_ms": None,
         "device": None, "track": None, "context": None,
+        "shuffle": None, "repeat": None,
     }

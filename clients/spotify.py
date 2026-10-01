@@ -222,9 +222,17 @@ class SpotifyClient:
                 raise SpotifyError(
                     self._describe_error(resp, f"Spotify API {method} {path}")
                 )
-            if not resp.content:
+            if resp.status_code == 204 or not resp.content.strip():
                 return {}
-            return resp.json()
+            try:
+                return resp.json()
+            except ValueError:
+                # Player commands (seek, shuffle, repeat) can succeed with a
+                # body that is not JSON. The command already worked, so only a
+                # read, where the body is the point, treats this as a failure.
+                if method != "GET":
+                    return {}
+                raise SpotifyError(f"Spotify API {method} {path} returned invalid JSON") from None
         raise SpotifyError(f"Request failed after retry: {method} {path}")
 
     # ---- public API ----
@@ -526,6 +534,8 @@ class SpotifyClient:
             "device": data.get("device"),
             "track": _normalize_track(item) if item.get("type") == "track" else None,
             "context": data.get("context"),
+            "shuffle": data.get("shuffle_state"),
+            "repeat": data.get("repeat_state"),
         }
 
     async def get_devices(self) -> list[dict]:

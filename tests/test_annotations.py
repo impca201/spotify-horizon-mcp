@@ -22,7 +22,12 @@ os.environ.setdefault("SPOTIFY_REFRESH_TOKEN", "test-refresh")
 import server
 
 #: Removes tracks, or unfollows the playlist entirely.
-MUST_BE_DESTRUCTIVE = {"delete_playlist", "remove_tracks_from_playlist"}
+MUST_BE_DESTRUCTIVE = {
+    "delete_playlist",
+    "remove_tracks_from_playlist",
+    "remove_from_library",
+    "replace_playlist_items",
+}
 
 #: Changes the account. A read-only hint on any of these is worse than no hint
 #: at all: it tells a client not to bother asking.
@@ -31,6 +36,13 @@ MUST_NOT_BE_READ_ONLY = MUST_BE_DESTRUCTIVE | {
     "create_playlist_from_tracks",
     "add_artists_to_playlist",
     "update_playlist",
+    "save_to_library",
+    "add_tracks_to_playlist",
+    "reorder_playlist_items",
+    "seek_playback",
+    "set_shuffle",
+    "set_repeat",
+    "transfer_playback",
 }
 
 
@@ -62,7 +74,8 @@ def test_creation_is_not_idempotent(tools):
     exactly the retry that goes wrong.
     """
     for name in ("create_playlist_from_artists", "create_playlist_from_tracks",
-                 "add_artists_to_playlist"):
+                 "add_artists_to_playlist", "add_tracks_to_playlist",
+                 "reorder_playlist_items"):
         assert tools[name].annotations.idempotentHint is False, name
 
 

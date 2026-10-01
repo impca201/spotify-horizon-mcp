@@ -10,6 +10,17 @@ import httpx
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 
+#: Item types /search accepts that this client supports.
+SEARCH_TYPES = frozenset(
+    {"track", "album", "artist", "playlist", "show", "episode", "audiobook"}
+)
+#: Item types that can be saved to the library by URI (/me/library).
+LIBRARY_KINDS = ("track", "album", "artist", "show", "episode", "audiobook", "playlist")
+#: Item types playback can start from as a context.
+CONTEXT_KINDS = ("album", "artist", "playlist", "show")
+REPEAT_STATES = ("track", "context", "off")
+TIME_RANGES = ("short_term", "medium_term", "long_term")
+
 
 class SpotifyError(Exception):
     """Raised when the Spotify API returns an error."""
@@ -32,6 +43,51 @@ def _normalize_track(track: dict) -> dict:
         "isrc": (track.get("external_ids") or {}).get("isrc"),
         "duration_ms": track.get("duration_ms"),
     }
+
+
+#: Fields copied through as-is when Spotify returns them. Development Mode strips
+#: several (popularity, followers, genres), so every one is optional.
+_SUMMARY_FIELDS = (
+    "album_type", "release_date", "total_tracks", "total_episodes", "total_chapters",
+    "duration_ms", "explicit", "popularity", "genres", "publisher", "label",
+    "languages", "media_type", "episode_number", "chapter_number", "track_number",
+    "disc_number", "is_playable",
+)
+
+
+def _summarize(item: dict) -> dict:
+    """Compact, uniform shape for any catalog object (track, album, artist, show,
+    episode, audiobook, chapter). Absent fields are left out rather than null."""
+    out: dict = {
+        "id": item.get("id"),
+        "uri": item.get("uri"),
+        "name": item.get("name"),
+        "type": item.get("type"),
+        "url": (item.get("external_urls") or {}).get("spotify"),
+    }
+    for key in ("artists", "authors", "narrators"):
+        names = [p.get("name") for p in item.get(key) or [] if p]
+        if names:
+            out[key] = names
+    album = item.get("album")
+    if isinstance(album, dict) and album.get("name"):
+        out["album"] = album["name"]
+    followers = item.get("followers")
+    if isinstance(followers, dict) and followers.get("total") is not None:
+        out["followers"] = followers["total"]
+    isrc = (item.get("external_ids") or {}).get("isrc")
+    if isrc:
+        out["isrc"] = isrc
+    description = item.get("description")
+    if description:
+        out["description"] = description[:500]
+    images = item.get("images") or []
+    if images and images[0] and images[0].get("url"):
+        out["image"] = images[0]["url"]
+    for key in _SUMMARY_FIELDS:
+        if item.get(key) is not None:
+            out[key] = item[key]
+    return out
 
 
 class SpotifyClient:
@@ -332,6 +388,7 @@ class SpotifyClient:
         name: str | None = None,
         description: str | None = None,
         public: bool | None = None,
+        collaborative: bool | None = None,
     ) -> None:
         """Rename a playlist, change its description, or toggle visibility."""
         body: dict = {}
@@ -341,6 +398,8 @@ class SpotifyClient:
             body["description"] = description
         if public is not None:
             body["public"] = public
+        if collaborative is not None:
+            body["collaborative"] = collaborative
         if not body:
             return
         await self._request("PUT", f"/playlists/{playlist_id}", json_body=body)
@@ -436,8 +495,8 @@ class SpotifyClient:
         self, query: str, item_type: str = "track", limit: int = 10
     ) -> list[dict]:
         """Search tracks, albums, artists or playlists within Dev Mode's cap."""
-        if item_type not in {"track", "album", "artist", "playlist"}:
-            raise ValueError("item_type must be track, album, artist or playlist")
+        if item_type not in SEARCH_TYPES:
+            raise ValueError(f"item_type must be one of: {', '.join(sorted(SEARCH_TYPES))}")
         if not query.strip():
             raise ValueError("query cannot be empty")
         data = await self._request(
@@ -474,11 +533,49 @@ class SpotifyClient:
         return data.get("devices") or []
 
     async def start_playback(
-        self, track: str | None = None, device_id: str | None = None
+        self,
+        track: str | None = None,
+        device_id: str | None = None,
+        context: str | None = None,
+        tracks: list[str] | None = None,
     ) -> None:
-        body = {"uris": [self.parse_track_ref(track)]} if track else None
+        """Resume playback, or start a track, a list of tracks, or a context
+        (album, artist, playlist or show). Only one of the three may be given."""
+        if sum(bool(x) for x in (track, tracks, context)) > 1:
+            raise ValueError("Give only one of track, tracks or context")
+        body: dict | None = None
+        if track:
+            body = {"uris": [self.parse_track_ref(track)]}
+        elif tracks:
+            body = {"uris": [self.parse_track_ref(t) for t in tracks]}
+        elif context:
+            body = {"context_uri": self.parse_uri(context, CONTEXT_KINDS)}
         params = {"device_id": device_id} if device_id else None
         await self._request("PUT", "/me/player/play", params=params, json_body=body)
+
+    async def seek(self, position_ms: int) -> None:
+        if position_ms < 0:
+            raise ValueError("position_ms must be 0 or greater")
+        await self._request(
+            "PUT", "/me/player/seek", params={"position_ms": position_ms}
+        )
+
+    async def set_shuffle(self, state: bool) -> None:
+        await self._request(
+            "PUT", "/me/player/shuffle", params={"state": "true" if state else "false"}
+        )
+
+    async def set_repeat(self, state: str) -> None:
+        if state not in REPEAT_STATES:
+            raise ValueError("state must be track, context or off")
+        await self._request("PUT", "/me/player/repeat", params={"state": state})
+
+    async def transfer_playback(self, device_id: str, play: bool = False) -> None:
+        if not device_id.strip():
+            raise ValueError("device_id cannot be empty")
+        await self._request(
+            "PUT", "/me/player", json_body={"device_ids": [device_id], "play": play}
+        )
 
     async def playback_action(self, action: str) -> None:
         endpoints = {
@@ -605,7 +702,282 @@ class SpotifyClient:
             offset += len(items)
         return results
 
+    # ---- catalog lookups ----
+
+    async def _paged(
+        self, path: str, limit: int, params: dict | None = None, key: str | None = None
+    ) -> list[dict]:
+        """Collect up to `limit` items from an offset-paginated endpoint.
+
+        `key` names the wrapper object when the page sits under one (e.g.
+        /me/following puts it under "artists"); otherwise items are top level.
+        """
+        limit = max(1, limit)
+        results: list[dict] = []
+        offset = 0
+        while len(results) < limit:
+            page_params = dict(params or {})
+            page_params.update({"limit": min(50, limit - len(results)), "offset": offset})
+            data = await self._request("GET", path, params=page_params)
+            page = (data.get(key) or {}) if key else data
+            items = page.get("items") or []
+            if not items:
+                break
+            results.extend(i for i in items if i)
+            if not page.get("next"):
+                break
+            offset += len(items)
+        return results[:limit]
+
+    async def get_profile(self) -> dict:
+        """The authenticated user's profile. Email needs user-read-email and is
+        deliberately not returned."""
+        data = await self._request("GET", "/me")
+        return {
+            "id": data.get("id"),
+            "display_name": data.get("display_name"),
+            "country": data.get("country"),
+            "product": data.get("product"),
+            "followers": (data.get("followers") or {}).get("total"),
+            "url": (data.get("external_urls") or {}).get("spotify"),
+        }
+
+    async def get_track(self, ref: str, market: str | None = None) -> dict:
+        data = await self._request(
+            "GET", f"/tracks/{self.parse_id(ref, 'track')}",
+            params={"market": market} if market else None,
+        )
+        return _summarize(data)
+
+    async def get_album(self, ref: str, market: str | None = None) -> dict:
+        """Album metadata with its full track listing."""
+        album_id = self.parse_id(ref, "album")
+        data = await self._request(
+            "GET", f"/albums/{album_id}", params={"market": market} if market else None
+        )
+        page = data.get("tracks") or {}
+        tracks = [t for t in page.get("items") or [] if t]
+        if page.get("next"):
+            tracks = await self._paged(
+                f"/albums/{album_id}/tracks", 500,
+                params={"market": market} if market else None,
+            )
+        out = _summarize(data)
+        out["tracks"] = [_summarize(t) for t in tracks]
+        return out
+
+    async def get_artist(self, ref: str) -> dict:
+        return _summarize(
+            await self._request("GET", f"/artists/{self.parse_id(ref, 'artist')}")
+        )
+
+    async def get_artist_albums(
+        self,
+        ref: str,
+        include_groups: str = "album,single",
+        limit: int = 20,
+        market: str | None = None,
+    ) -> list[dict]:
+        """Albums by an artist. include_groups is a comma-separated subset of
+        album, single, appears_on, compilation."""
+        groups = [g.strip() for g in include_groups.split(",") if g.strip()]
+        bad = set(groups) - {"album", "single", "appears_on", "compilation"}
+        if bad or not groups:
+            raise ValueError(
+                "include_groups must be a comma-separated list of "
+                "album, single, appears_on, compilation"
+            )
+        params: dict = {"include_groups": ",".join(groups)}
+        if market:
+            params["market"] = market
+        items = await self._paged(
+            f"/artists/{self.parse_id(ref, 'artist')}/albums", min(limit, 200), params
+        )
+        return [_summarize(a) for a in items]
+
+    async def get_show(self, ref: str, market: str | None = None) -> dict:
+        data = await self._request(
+            "GET", f"/shows/{self.parse_id(ref, 'show')}",
+            params={"market": market} if market else None,
+        )
+        return _summarize(data)
+
+    async def get_show_episodes(
+        self, ref: str, limit: int = 20, market: str | None = None
+    ) -> list[dict]:
+        items = await self._paged(
+            f"/shows/{self.parse_id(ref, 'show')}/episodes", min(limit, 200),
+            {"market": market} if market else None,
+        )
+        return [_summarize(e) for e in items]
+
+    async def get_episode(self, ref: str, market: str | None = None) -> dict:
+        data = await self._request(
+            "GET", f"/episodes/{self.parse_id(ref, 'episode')}",
+            params={"market": market} if market else None,
+        )
+        return _summarize(data)
+
+    async def get_audiobook(self, ref: str, market: str = "US") -> dict:
+        """Audiobook metadata. Spotify serves audiobooks in only a few markets
+        (US, UK, CA, IE, NZ, AU), so market defaults to US."""
+        data = await self._request(
+            "GET", f"/audiobooks/{self.parse_id(ref, 'audiobook')}",
+            params={"market": market},
+        )
+        out = _summarize(data)
+        out["chapters"] = [
+            _summarize(c) for c in (data.get("chapters") or {}).get("items") or [] if c
+        ]
+        return out
+
+    async def get_playlist_cover(self, playlist_id: str) -> list[dict]:
+        data = await self._request("GET", f"/playlists/{playlist_id}/images")
+        images = data if isinstance(data, list) else data.get("images") or []
+        return [
+            {"url": i.get("url"), "width": i.get("width"), "height": i.get("height")}
+            for i in images if i
+        ]
+
+    # ---- user data ----
+
+    async def get_saved(self, kind: str, limit: int = 20) -> list[dict]:
+        """Saved albums, shows, episodes or audiobooks, newest first."""
+        paths = {
+            "album": "/me/albums", "show": "/me/shows",
+            "episode": "/me/episodes", "audiobook": "/me/audiobooks",
+        }
+        if kind not in paths:
+            raise ValueError("kind must be album, show, episode or audiobook")
+        items = await self._paged(paths[kind], min(limit, 200))
+        # Each entry wraps the item under its own key, next to added_at.
+        return [
+            {"added_at": i.get("added_at"), **_summarize(i.get(kind) or i.get("item") or i)}
+            for i in items
+        ]
+
+    async def check_saved(self, refs: list[str]) -> list[dict]:
+        """Whether each item is in the library. Refs must be URIs or URLs, since
+        a bare ID does not say what kind of item it is."""
+        uris = [self.parse_uri(r, LIBRARY_KINDS) for r in refs]
+        flags: list[bool] = []
+        for i in range(0, len(uris), 40):
+            data = await self._request(
+                "GET", "/me/library/contains",
+                params={"uris": ",".join(uris[i : i + 40])},
+            )
+            flags.extend(bool(f) for f in (data if isinstance(data, list) else []))
+        return [{"uri": u, "saved": f} for u, f in zip(uris, flags)]
+
+    async def set_saved(self, refs: list[str], save: bool = True) -> int:
+        """Save or remove items (tracks, albums, artists, shows, episodes,
+        audiobooks, playlists) in one go. Chunked at 40 URIs per request."""
+        uris = [self.parse_uri(r, LIBRARY_KINDS) for r in refs]
+        for i in range(0, len(uris), 40):
+            await self._request(
+                "PUT" if save else "DELETE", "/me/library",
+                params={"uris": ",".join(uris[i : i + 40])},
+            )
+        return len(uris)
+
+    async def get_top_items(
+        self, kind: str = "tracks", time_range: str = "medium_term", limit: int = 20
+    ) -> list[dict]:
+        """Your most listened-to artists or tracks. Needs user-top-read."""
+        if kind not in ("artists", "tracks"):
+            raise ValueError("kind must be artists or tracks")
+        if time_range not in TIME_RANGES:
+            raise ValueError("time_range must be short_term, medium_term or long_term")
+        data = await self._request(
+            "GET", f"/me/top/{kind}",
+            params={"time_range": time_range, "limit": max(1, min(limit, 50))},
+        )
+        return [_summarize(i) for i in data.get("items") or [] if i]
+
+    async def get_followed_artists(self, limit: int = 20) -> list[dict]:
+        """Artists you follow. Needs user-follow-read."""
+        data = await self._request(
+            "GET", "/me/following",
+            params={"type": "artist", "limit": max(1, min(limit, 50))},
+        )
+        return [_summarize(a) for a in (data.get("artists") or {}).get("items") or [] if a]
+
+    # ---- playlist contents ----
+
+    async def reorder_playlist_items(
+        self, playlist_id: str, range_start: int, insert_before: int,
+        range_length: int = 1,
+    ) -> str | None:
+        """Move a block of items inside a playlist. Returns the new snapshot_id."""
+        if min(range_start, insert_before) < 0 or range_length < 1:
+            raise ValueError(
+                "range_start and insert_before must be 0 or greater, range_length 1 or more"
+            )
+        data = await self._request(
+            "PUT", f"/playlists/{playlist_id}/items",
+            json_body={
+                "range_start": range_start,
+                "insert_before": insert_before,
+                "range_length": range_length,
+            },
+        )
+        return data.get("snapshot_id")
+
+    async def replace_playlist_items(self, playlist_id: str, uris: list[str]) -> int:
+        """Replace everything on a playlist. The first 100 URIs replace the
+        contents, any further ones are appended (Spotify caps a request at 100)."""
+        first, rest = uris[:100], uris[100:]
+        await self._request(
+            "PUT", f"/playlists/{playlist_id}/items", json_body={"uris": first}
+        )
+        if rest:
+            await self.add_tracks(playlist_id, rest)
+        return len(uris)
+
+    async def add_tracks_at(
+        self, playlist_id: str, uris: list[str], position: int | None = None
+    ) -> int:
+        """Add tracks, optionally inserting at a zero-based position. Without a
+        position this is add_tracks."""
+        if position is None:
+            return await self.add_tracks(playlist_id, uris)
+        if position < 0:
+            raise ValueError("position must be 0 or greater")
+        # Each chunk lands right after the previous one, so order is preserved.
+        for i in range(0, len(uris), 100):
+            await self._request(
+                "POST", f"/playlists/{playlist_id}/items",
+                json_body={"uris": uris[i : i + 100], "position": position + i},
+            )
+        return len(uris)
+
     # ---- parsing helpers ----
+
+    _REF_RE = re.compile(
+        r"(?:spotify:|open\.spotify\.com/(?:intl-[A-Za-z-]+/)?)"
+        r"(track|album|artist|show|episode|audiobook|playlist)[:/]([A-Za-z0-9]{22})"
+    )
+
+    @classmethod
+    def parse_uri(cls, ref: str, kinds: tuple[str, ...] = LIBRARY_KINDS) -> str:
+        """Normalize a Spotify URI or open.spotify.com URL to `spotify:<kind>:<id>`.
+
+        Bare IDs are rejected: they do not say what kind of item they are.
+        """
+        m = cls._REF_RE.search(ref.strip())
+        if not m or m.group(1) not in kinds:
+            raise ValueError(
+                f"Not a recognizable Spotify {'/'.join(kinds)} URI or URL: {ref!r}"
+            )
+        return f"spotify:{m.group(1)}:{m.group(2)}"
+
+    @classmethod
+    def parse_id(cls, ref: str, kind: str) -> str:
+        """Accept a URI, URL or bare 22-char ID of the given kind; return the ID."""
+        s = ref.strip()
+        if re.fullmatch(r"[A-Za-z0-9]{22}", s):
+            return s
+        return cls.parse_uri(s, (kind,)).rsplit(":", 1)[1]
 
     @staticmethod
     def parse_track_ref(ref: str) -> str:

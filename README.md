@@ -2,13 +2,20 @@
 
 A personal Spotify MCP server for searching music, controlling playback, reading saved and recent tracks, and managing playlists. This Horizon-ready fork is based on [pete-builds/mcp-spotify](https://github.com/pete-builds/mcp-spotify), licensed under MIT. It uses FastMCP and the Spotify Web API.
 
-Tools include `search_spotify` (tracks, albums, artists, playlists), `current_playback`, `available_devices`, `play_music`, `pause_music`, `skip_track`, `set_playback_volume`, `playback_queue`, `queue_track`, `liked_songs`, `set_song_liked`, `recently_played`, plus 11 artist and playlist tools from the upstream project. Playback needs Spotify Premium and an active Spotify Connect device.
+Tools, grouped by what they do:
+
+- **Search and lookup:** `search_spotify` (tracks, albums, artists, playlists, shows, episodes, audiobooks), `search_artist`, `get_track`, `get_album`, `get_artist`, `get_artist_albums`, `get_show`, `get_show_episodes`, `get_episode`, `get_audiobook`, `get_artist_top_tracks`, `get_my_profile`.
+- **Playback:** `current_playback`, `available_devices`, `play_music` (a track, several tracks, or an album, artist, playlist or show), `pause_music`, `skip_track`, `seek_playback`, `set_shuffle`, `set_repeat`, `set_playback_volume`, `transfer_playback`, `playback_queue`, `queue_track`.
+- **Library and listening:** `liked_songs`, `set_song_liked`, `saved_items` (albums, shows, episodes, audiobooks), `check_saved`, `save_to_library`, `remove_from_library` (also follows and unfollows artists and playlists), `recently_played`, `top_items`, `followed_artists`.
+- **Playlists:** `list_my_playlists`, `get_playlist_metadata`, `list_playlist_tracks`, `get_playlist_cover`, `create_playlist_from_artists`, `create_playlist_from_tracks`, `add_artists_to_playlist`, `add_tracks_to_playlist`, `reorder_playlist_items`, `replace_playlist_items`, `update_playlist`, `remove_tracks_from_playlist`, `delete_playlist`.
+
+Playback needs Spotify Premium and an active Spotify Connect device.
 
 ## Spotify authorization
 
 1. Create a Web API app at [Spotify for Developers](https://developer.spotify.com/dashboard). Development Mode requires the app owner to have Premium and allows up to five authorized users. Add your Spotify account under **User Management**, even if you own the app.
 2. Add the exact redirect URI `http://127.0.0.1:8765/callback` to the Spotify app.
-3. Run the one-time bootstrap **on your own computer**, from a local copy of this repository. It needs only Python 3; no project dependencies or Docker are needed for this step. It requests playlist read/write, playback read/write, recently played, and library read/write scopes. If you previously generated a refresh token with the playlist-only version, rerun bootstrap to grant the added scopes.
+3. Run the one-time bootstrap **on your own computer**, from a local copy of this repository. It needs only Python 3; no project dependencies or Docker are needed for this step. It requests playlist read/write, playback read/write, recently played, library read/write, top items and follow read/write scopes. If you generated a refresh token with an earlier version, rerun bootstrap to grant the added scopes. Until you do, `top_items`, `followed_artists` and following artists through `save_to_library` return a 403.
 
    **Windows (PowerShell):** Clone [this repository](https://github.com/impca201/spotify-horizon-mcp) with GitHub Desktop, or use **Fetch origin / Pull origin** if you already cloned it. In GitHub Desktop, choose **Repository → Show in Explorer**. In File Explorer, click the address bar, type `powershell`, and press Enter. The prompt should show the repository folder (for example, `PS C:\Apps\GitHub\spotify-horizon-mcp>`).
 
@@ -82,7 +89,9 @@ To run the local HTTP server with credentials in your environment, use `uv run p
 
 ## Limits and troubleshooting
 
-- Spotify Development Mode restricts some endpoints and caps searches at ten results. This fork uses the newer `/me/library` and `/playlists/{id}/items` routes; check Spotify's current Web API documentation if an endpoint returns 403/404. Playback requires Premium and an active device.
+- Spotify Development Mode restricts some endpoints and caps searches at ten results. Batch lookups (several tracks, albums or artists at once), artist top-tracks, related artists, new releases, browse categories, audio analysis and recommendations return 403/404 for Development Mode apps, so this server does not offer them.
+- Audiobooks are only served in the US, UK, Canada, Ireland, New Zealand and Australia.
+- This fork uses the newer `/me/library` and `/playlists/{id}/items` routes; check Spotify's current Web API documentation if an endpoint returns 403/404. Playback requires Premium and an active device.
 - A Spotify 401 usually means expired or revoked authorization. Repeat bootstrap and replace the refresh token in Horizon. A 403 can mean your Spotify user is absent from User Management or that an endpoint is unavailable in Development Mode.
 - A build error involving `pete-mcp-core` points to the immutable GitHub tarball dependency in `pyproject.toml`; it is a build dependency, not a Spotify credential.
 - The server keeps a rotated refresh token in memory while running. A cold restart after rotation may require a new bootstrap. A successful build alone does not prove a live Spotify API call.

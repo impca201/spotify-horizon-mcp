@@ -1,6 +1,6 @@
 # Spotify
 
-Music and podcast streaming service.
+Find music and podcasts, control playback and manage your library and playlists on Spotify.
 
 A personal Spotify MCP server for searching and looking up music, podcasts and audiobooks, controlling playback, reading and editing your library, and managing playlists. This Horizon-ready fork is based on [pete-builds/mcp-spotify](https://github.com/pete-builds/mcp-spotify), licensed under MIT. It uses FastMCP and the Spotify Web API.
 

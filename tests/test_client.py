@@ -419,3 +419,40 @@ async def test_search_track_by_isrc_returns_normalized(client):
     assert t["uri"] == "spotify:track:t1"
     assert t["artists"] == [{"id": "a1", "name": "Artist"}]
     assert t["album"] == {"id": "al1", "name": "Album"}
+
+
+# ---------------------------------------------------------------------------
+# successful responses whose body is not JSON
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", [b"", b"\n", b"OK"])
+async def test_successful_player_command_with_non_json_body_is_ok(client, body):
+    client._access_token, client._expires_at = "tok", 9e12
+    respx.put(f"{SPOTIFY_API_BASE}/me/player/seek").mock(
+        return_value=httpx.Response(200, content=body)
+    )
+    assert await client._request("PUT", "/me/player/seek", params={"position_ms": 1}) == {}
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_non_json_body_on_a_read_is_an_error(client):
+    client._access_token, client._expires_at = "tok", 9e12
+    respx.get(f"{SPOTIFY_API_BASE}/me/player").mock(
+        return_value=httpx.Response(200, content=b"<html>oops</html>")
+    )
+    with pytest.raises(SpotifyError, match="invalid JSON"):
+        await client._request("GET", "/me/player")
+
+
+@pytest.mark.asyncio
+async def test_playback_state_reports_shuffle_and_repeat(client):
+    from unittest.mock import AsyncMock
+    client._request = AsyncMock(return_value={
+        "is_playing": True, "shuffle_state": True, "repeat_state": "track",
+    })
+    state = await client.get_playback_state()
+    assert state["shuffle"] is True and state["repeat"] == "track"

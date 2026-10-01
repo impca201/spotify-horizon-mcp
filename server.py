@@ -644,7 +644,7 @@ async def search_spotify(query: str, item_type: str = "track", limit: int = 10) 
 @mcp.tool(annotations=READ_ONLY)
 @_spotify_errors
 async def current_playback() -> str:
-    """Get the current track, device and playback state."""
+    """Get the current track, device, shuffle, repeat and playback state."""
     try:
         return _format(await spotify.get_playback_state())
     except SpotifyError as exc:

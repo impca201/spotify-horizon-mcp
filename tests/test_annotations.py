@@ -99,3 +99,20 @@ def test_no_tool_is_both_read_only_and_destructive(tools):
 def test_every_tool_declares_an_open_world(tools):
     closed = [n for n, t in tools.items() if t.annotations.openWorldHint is not True]
     assert closed == []
+
+
+def test_server_sends_usage_instructions():
+    """Facts that are easy to get wrong must reach the client on connect, and the
+    tools they name must still exist, so the text cannot quietly go stale."""
+    text = server.mcp.instructions or ""
+    assert text.strip()
+    tool_names = {t.name for t in asyncio.run(server.mcp.list_tools())}
+    named = {
+        "save_to_library", "remove_from_library", "check_saved", "play_music",
+        "list_my_playlists", "search_spotify", "available_devices",
+        "transfer_playback", "remove_tracks_from_playlist", "delete_playlist",
+        "replace_playlist_items", "update_playlist", "get_audiobook",
+        "top_items", "followed_artists",
+    }
+    assert named <= tool_names, sorted(named - tool_names)
+    assert all(name in text for name in named), [n for n in named if n not in text]

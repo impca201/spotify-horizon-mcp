@@ -91,8 +91,44 @@ async def lifespan(_app):
 
 
 # --- MCP Server ---
+#: Sent to the client when it connects. Only facts a model cannot read off the
+#: individual tool descriptions, or that are easy to get wrong.
+INSTRUCTIONS = """\
+Tools for one Spotify account: search and lookup, playback, library, playlists.
+
+References
+- Track tools accept a spotify: URI, an open.spotify.com URL or a 22-character ID.
+- Library tools (save_to_library, remove_from_library, check_saved) and the
+  context argument of play_music need a URI or URL. A bare ID is rejected because
+  it does not say what kind of item it is.
+- Playlist tools also accept an exact playlist name from list_my_playlists.
+- search_spotify returns ready-to-use URIs; pass them on as they are.
+
+Playback
+- Needs Spotify Premium and an active device. If a call fails with "no active
+  device", check available_devices, then transfer_playback or start playback in a
+  Spotify app first.
+
+Changing things
+- remove_from_library, remove_tracks_from_playlist, delete_playlist (it unfollows)
+  and replace_playlist_items cannot be undone from here. Confirm with the user first.
+- update_playlist returns the playlist's real state in "current". If it also returns
+  "warning", Spotify did not apply the change as asked: tell the user.
+  collaborative=True needs public=False, and Spotify keeps a playlist public once
+  it has been made collaborative.
+
+Limits
+- Spotify Development Mode caps search at 10 results and often omits popularity,
+  genres and followers. Missing fields are not an error.
+- Audiobooks exist only in the US, UK, Canada, Ireland, New Zealand and Australia;
+  get_audiobook uses market US by default.
+- A 403 from top_items, followed_artists or following artists means the saved
+  refresh token lacks a scope. The owner has to rerun bootstrap.py.
+"""
+
 mcp = FastMCP(
     "Spotify",
+    instructions=INSTRUCTIONS,
     lifespan=lifespan,
     auth=build_auth_provider(
         settings.auth_token,

@@ -540,8 +540,16 @@ async def update_playlist(
             allowed on a non-public playlist).
 
     Returns:
-        JSON confirming the update with playlist_id, url, applied changes.
+        JSON with playlist_id, url, what was requested, the playlist's actual
+        state read back from Spotify, and a warning if they differ.
     """
+    if collaborative and public is not False:
+        # Spotify only allows collaborative on a private playlist, and in live
+        # testing turning it on flipped a private playlist public and left it
+        # there. Require public=False so the intent is explicit.
+        return _format(
+            {"error": "collaborative=True needs public=False in the same call"}
+        )
     try:
         target = await spotify.resolve_playlist(playlist)
         if not target:
@@ -553,20 +561,38 @@ async def update_playlist(
             public=public,
             collaborative=collaborative,
         )
-        return _format(
-            {
-                "playlist_id": target["id"],
-                "url": target["url"],
-                "applied": {
-                    k: v for k, v in [
-                        ("name", new_name or None),
-                        ("description", description or None),
-                        ("public", public),
-                        ("collaborative", collaborative),
-                    ] if v is not None
-                },
-            }
-        )
+        requested = {
+            k: v for k, v in [
+                ("name", new_name or None),
+                ("description", description or None),
+                ("public", public),
+                ("collaborative", collaborative),
+            ] if v is not None
+        }
+        # Spotify answers 200 whatever it did with the request, so read the
+        # playlist back instead of echoing what was asked for.
+        actual = await spotify.get_playlist_metadata(target["id"])
+        result = {
+            "playlist_id": target["id"],
+            "url": target["url"],
+            "requested": requested,
+            "current": {
+                k: actual.get(k)
+                for k in ("name", "description", "public", "collaborative")
+            },
+        }
+        mismatch = {
+            k: {"requested": v, "actual": actual.get(k)}
+            for k, v in requested.items()
+            if actual.get(k) != v
+        }
+        if mismatch:
+            result["warning"] = (
+                "Spotify did not apply everything as requested "
+                "(it can also lag a moment). Check 'mismatch' and 'current'."
+            )
+            result["mismatch"] = mismatch
+        return _format(result)
     except SpotifyError as e:
         log.error("Spotify API error: %s", e)
         return _format({"error": str(e)})

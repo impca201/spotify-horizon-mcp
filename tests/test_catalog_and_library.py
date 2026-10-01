@@ -326,3 +326,35 @@ async def test_collaborative_requires_explicit_private(monkeypatch, public):
     out = json.loads(await _fn(server.update_playlist)("P", public=public, collaborative=True))
     assert "public=False" in out["error"]
     fake.update_playlist.assert_not_awaited()
+
+
+# ---- audiobooks come back from search as show URIs ----
+
+
+@pytest.mark.asyncio
+async def test_audiobook_search_returns_audiobook_uris(client):
+    client._request = AsyncMock(return_value={"audiobooks": {"items": [{
+        "id": ID, "name": "HP", "uri": f"spotify:show:{ID}",
+        "external_urls": {"spotify": f"https://open.spotify.com/show/{ID}"},
+    }]}})
+    out = await client.search_catalog("harry potter", "audiobook")
+    assert out[0]["uri"] == f"spotify:audiobook:{ID}"
+    assert out[0]["url"] == f"https://open.spotify.com/audiobook/{ID}"
+
+
+@pytest.mark.asyncio
+async def test_show_search_results_are_left_alone(client):
+    client._request = AsyncMock(return_value={"shows": {"items": [{
+        "id": ID, "name": "Pod", "uri": f"spotify:show:{ID}",
+        "external_urls": {"spotify": f"https://open.spotify.com/show/{ID}"},
+    }]}})
+    out = await client.search_catalog("pod", "show")
+    assert out[0]["uri"] == f"spotify:show:{ID}"
+
+
+def test_get_audiobook_accepts_show_form_but_shows_still_reject_it():
+    assert SpotifyClient.parse_id(f"spotify:show:{ID}", "audiobook") == ID
+    assert SpotifyClient.parse_id(f"https://open.spotify.com/show/{ID}", "audiobook") == ID
+    assert SpotifyClient.parse_id(f"spotify:audiobook:{ID}", "audiobook") == ID
+    with pytest.raises(ValueError):
+        SpotifyClient.parse_id(f"spotify:audiobook:{ID}", "show")

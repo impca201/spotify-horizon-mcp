@@ -512,7 +512,7 @@ class SpotifyClient:
             params={"q": query.strip(), "type": item_type, "limit": max(1, min(limit, 10))},
         )
         collection = (data.get(item_type + "s") or {}).get("items") or []
-        return [
+        results = [
             {
                 "id": item.get("id"),
                 "uri": item.get("uri"),
@@ -524,6 +524,15 @@ class SpotifyClient:
             }
             for item in collection if item
         ]
+        if item_type == "audiobook":
+            # Spotify lists audiobooks under show URIs and URLs here, but the
+            # audiobook endpoints and library want the audiobook form.
+            for r in results:
+                if r["id"]:
+                    r["uri"] = f"spotify:audiobook:{r['id']}"
+                if r["url"]:
+                    r["url"] = r["url"].replace("/show/", "/audiobook/")
+        return results
 
     async def get_playback_state(self) -> dict:
         data = await self._request("GET", "/me/player")
@@ -987,7 +996,9 @@ class SpotifyClient:
         s = ref.strip()
         if re.fullmatch(r"[A-Za-z0-9]{22}", s):
             return s
-        return cls.parse_uri(s, (kind,)).rsplit(":", 1)[1]
+        # Audiobooks also circulate as show URIs and URLs (older search results).
+        kinds = (kind, "show") if kind == "audiobook" else (kind,)
+        return cls.parse_uri(s, kinds).rsplit(":", 1)[1]
 
     @staticmethod
     def parse_track_ref(ref: str) -> str:

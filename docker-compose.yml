@@ -6,10 +6,12 @@ x-logging: &default-logging
 
 services:
   mcp-spotify:
-    # Pull the published image by default. To build locally instead, comment
-    # out `image:` and uncomment `build: .`.
-    image: ghcr.io/pete-builds/mcp-spotify:0.2.1
-    # build: .
+    # Builds the image from this repository, so it always matches the code you
+    # checked out. A release (a v*.*.* tag) also publishes the image to ghcr.io.
+    # To pull that image instead, comment out `build: .` and uncomment `image:`;
+    # the release workflow keeps the tag on that line current.
+    build: .
+    # image: ghcr.io/impca201/spotify-horizon-mcp:0.2.1
     container_name: mcp-spotify
     restart: unless-stopped
     # Bridge networking, so this file stays portable. A host whose Docker

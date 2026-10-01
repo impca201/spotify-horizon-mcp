@@ -658,7 +658,7 @@ class SpotifyClient:
             for item in items:
                 track = item.get("item") or item.get("track") or {}
                 if item.get("is_local") or not track.get("id"):
-                    # Local file or removed/unplayable track — skip; can't sync.
+                    # Local file or removed/unplayable track: no usable id, so skip it.
                     continue
                 normalized = _normalize_track(track)
                 normalized["added_at"] = item.get("added_at")

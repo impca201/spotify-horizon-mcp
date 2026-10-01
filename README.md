@@ -1,4 +1,6 @@
-# Spotify MCP for Prefect Horizon
+# Spotify
+
+Music and podcast streaming service.
 
 A personal Spotify MCP server for searching and looking up music, podcasts and audiobooks, controlling playback, reading and editing your library, and managing playlists. This Horizon-ready fork is based on [pete-builds/mcp-spotify](https://github.com/pete-builds/mcp-spotify), licensed under MIT. It uses FastMCP and the Spotify Web API.
 

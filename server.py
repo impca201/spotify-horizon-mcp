@@ -1,8 +1,9 @@
-"""MCP Spotify - create playlists from artist lists via the Spotify Web API.
+"""MCP Spotify - search, playback, library and playlist tools for one Spotify account.
 
-Provides Claude Code tools to search for artists, pull their top tracks, and
-assemble fresh playlists on Pete's Spotify account via the Model Context
-Protocol (Streamable HTTP transport).
+Provides tools to search the catalog (tracks, albums, artists, playlists, shows,
+episodes, audiobooks), look items up, control playback, read and edit your
+library, and build and edit playlists, over the Model Context Protocol
+(Streamable HTTP transport).
 
 Uses OAuth 2.0 Authorization Code flow with a long-lived refresh token.
 See bootstrap.py for the one-time token acquisition procedure.
@@ -272,7 +273,7 @@ async def create_playlist_from_artists(
     """Create a new Spotify playlist populated with top tracks from each artist.
 
     Resolves each artist name to its Spotify ID (best match), pulls their top
-    tracks in the given market, and adds them to a new playlist on Pete's
+    tracks in the given market, and adds them to a new playlist on your
     account. Artists that cannot be resolved are returned in artists_not_found.
 
     Args:
@@ -471,9 +472,9 @@ async def list_my_playlists(limit: int = 50) -> str:
 async def get_playlist_metadata(playlist: str) -> str:
     """Get header-only metadata for a playlist (no track listing).
 
-    Cheap call for diff planning: snapshot_id changes whenever the playlist's
-    contents change, so the sync engine can skip unchanged playlists before
-    pulling the full track list.
+    Cheap call for change detection: snapshot_id changes whenever the playlist's
+    contents change, so a caller can skip unchanged playlists before pulling
+    the full track list.
 
     Args:
         playlist: URL, URI, 22-char ID, or exact name of the playlist.
@@ -498,7 +499,7 @@ async def list_playlist_tracks(playlist: str) -> str:
     """List every track on a playlist with ISRC, artists, and duration.
 
     Returns one record per track. ISRC is included (from external_ids.isrc)
-    and is the primary cross-service matching key for Spotify <-> Tidal sync.
+    and is a stable key for matching tracks across services.
     Local (non-Spotify) tracks added from a user's machine are skipped.
 
     Args:

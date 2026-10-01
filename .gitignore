@@ -8,5 +8,5 @@ __pycache__/
 .venv/
 venv/
 
-# Per-host compose override (homelab uses host networking; not for public repo)
+# Per-host compose override (e.g. host networking); not for the public repo
 docker-compose.override.yml

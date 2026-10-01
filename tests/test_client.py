@@ -23,6 +23,7 @@ from clients.spotify import (
     SPOTIFY_TOKEN_URL,
     SpotifyClient,
     SpotifyError,
+    _normalize_track,
 )
 
 
@@ -386,39 +387,23 @@ async def test_search_artists_shapes_and_prefers_exact(client):
     }
 
 
-@respx.mock
-@pytest.mark.asyncio
-async def test_search_track_by_isrc_returns_normalized(client):
-    respx.post(SPOTIFY_TOKEN_URL).mock(
-        return_value=httpx.Response(200, json=_token_payload())
+def test_normalize_track_shape():
+    t = _normalize_track(
+        {
+            "id": "t1",
+            "uri": "spotify:track:t1",
+            "name": "Song",
+            "artists": [{"id": "a1", "name": "Artist"}],
+            "album": {"id": "al1", "name": "Album"},
+            "external_ids": {"isrc": "USABC1234567"},
+            "duration_ms": 200000,
+        }
     )
-    respx.get(f"{SPOTIFY_API_BASE}/search").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "tracks": {
-                    "items": [
-                        {
-                            "id": "t1",
-                            "uri": "spotify:track:t1",
-                            "name": "Song",
-                            "artists": [{"id": "a1", "name": "Artist"}],
-                            "album": {"id": "al1", "name": "Album"},
-                            "external_ids": {"isrc": "USABC1234567"},
-                            "duration_ms": 200000,
-                        }
-                    ]
-                }
-            },
-        )
-    )
-    tracks = await client.search_track_by_isrc("USABC1234567")
-    assert len(tracks) == 1
-    t = tracks[0]
     assert t["isrc"] == "USABC1234567"
     assert t["uri"] == "spotify:track:t1"
     assert t["artists"] == [{"id": "a1", "name": "Artist"}]
     assert t["album"] == {"id": "al1", "name": "Album"}
+    assert t["duration_ms"] == 200000
 
 
 # ---------------------------------------------------------------------------

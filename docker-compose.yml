@@ -13,7 +13,7 @@ services:
     container_name: mcp-spotify
     restart: unless-stopped
     # Bridge networking, so this file stays portable. A host whose Docker
-    # bridge IP pool is exhausted (nix1) supplies a gitignored
+    # bridge IP pool is exhausted supplies a gitignored
     # docker-compose.override.yml with `network_mode: host` and
     # `ports: !reset []`.
     ports:

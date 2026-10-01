@@ -27,9 +27,9 @@ class SpotifyError(Exception):
 
 
 def _normalize_track(track: dict) -> dict:
-    """Convert a raw Spotify track object to the normalized shape shared with
-    the Tidal client. Used by get_playlist_tracks (with added_at layered on
-    top by the caller) and by the ISRC/fuzzy search helpers."""
+    """Convert a raw Spotify track object to the compact track shape used by the
+    playlist, queue, playback and history tools. get_playlist_tracks layers
+    added_at on top of it."""
     album = track.get("album") or {}
     return {
         "id": track.get("id"),
@@ -99,7 +99,6 @@ class SpotifyClient:
         self._refresh_token = refresh_token
         self._access_token: str | None = None
         self._expires_at: float = 0.0
-        self._user_id: str | None = None
         self._token_lock = asyncio.Lock()
         self._client = httpx.AsyncClient(
             timeout=30,
@@ -330,14 +329,6 @@ class SpotifyClient:
             for t in deduped[: max(1, min(limit, 10))]
         ]
 
-    async def get_current_user_id(self) -> str:
-        """Return the authenticated user's Spotify user ID (cached)."""
-        if self._user_id:
-            return self._user_id
-        data = await self._request("GET", "/me")
-        self._user_id = data["id"]
-        return self._user_id
-
     async def create_playlist(
         self, name: str, public: bool = False, description: str = ""
     ) -> dict:
@@ -454,50 +445,6 @@ class SpotifyClient:
                 break
             offset += len(items)
         return results
-
-    async def search_track_by_isrc(self, isrc: str, market: str = "US") -> list[dict]:
-        """Look up Spotify tracks by ISRC. Returns the normalized track shape.
-
-        Spotify's `/search` endpoint supports an `isrc:` field operator. ISRC
-        can resolve to multiple regional variants, so this returns a list and
-        the caller picks the right one (the sync matcher prefers the market
-        match).
-        """
-        data = await self._request(
-            "GET",
-            "/search",
-            params={
-                "q": f"isrc:{isrc}",
-                "type": "track",
-                "limit": 10,
-                "market": market,
-            },
-        )
-        items = (data.get("tracks") or {}).get("items", []) or []
-        return [_normalize_track(t) for t in items]
-
-    async def search_track_fuzzy(
-        self, title: str, artist: str, duration_ms: int | None = None
-    ) -> list[dict]:
-        """Fallback when ISRC isn't available or didn't match on the target side.
-
-        Caller (matcher) is responsible for picking the best result; this
-        method just runs the search and returns normalized candidates.
-        """
-        # Strip double quotes from the strings: they would close our
-        # `artist:"..."` / `track:"..."` filters and corrupt the query.
-        safe_title = (title or "").replace('"', "")
-        safe_artist = (artist or "").replace('"', "")
-        if not safe_title or not safe_artist:
-            return []
-        q = f'track:"{safe_title}" artist:"{safe_artist}"'
-        data = await self._request(
-            "GET",
-            "/search",
-            params={"q": q, "type": "track", "limit": 10},
-        )
-        items = (data.get("tracks") or {}).get("items", []) or []
-        return [_normalize_track(t) for t in items]
 
     async def search_catalog(
         self, query: str, item_type: str = "track", limit: int = 10
@@ -659,8 +606,8 @@ class SpotifyClient:
     async def get_playlist_metadata(self, playlist_id: str) -> dict:
         """Return header-only metadata for a playlist (no track listing).
 
-        Cheap call used by the sync engine to compare snapshot_id and skip
-        unchanged playlists before pulling track contents.
+        Cheap call to compare snapshot_id and skip unchanged playlists before
+        pulling track contents.
 
         Requires `playlist-read-private` (and `playlist-read-collaborative`
         for collaborative playlists).
@@ -687,12 +634,12 @@ class SpotifyClient:
     async def get_playlist_tracks(self, playlist_id: str) -> list[dict]:
         """Return every track on a playlist as a normalized list.
 
-        Paginates at 100 items per page (Spotify's max). Each track dict
-        includes the ISRC (from `external_ids.isrc`) which is the
-        cross-service matching key for Spotify <-> Tidal sync.
+        Paginates at 50 items per page. Each track dict includes the ISRC
+        (from `external_ids.isrc`), a stable key for matching tracks across
+        services.
 
         Local (non-Spotify) tracks added from a user's machine are skipped —
-        they have no usable id/uri/isrc and can't be synced.
+        they have no usable id, URI or ISRC.
 
         Requires `playlist-read-private` (and `playlist-read-collaborative`
         for collaborative playlists).
@@ -711,7 +658,7 @@ class SpotifyClient:
             for item in items:
                 track = item.get("item") or item.get("track") or {}
                 if item.get("is_local") or not track.get("id"):
-                    # Local file or removed/unplayable track — skip; can't sync.
+                    # Local file or removed/unplayable track: no usable id, so skip it.
                     continue
                 normalized = _normalize_track(track)
                 normalized["added_at"] = item.get("added_at")

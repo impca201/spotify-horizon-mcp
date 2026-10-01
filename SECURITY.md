@@ -8,7 +8,7 @@ The latest commit on `main` is the only supported version. Older tags and releas
 
 If you find a security issue, **please do not open a public GitHub issue**.
 
-Email **pstergion@gmail.com** with:
+Use GitHub's private vulnerability reporting: open the repository's **Security** tab, choose **Report a vulnerability**, and include:
 
 - A description of the vulnerability
 - Steps to reproduce (or a proof of concept)

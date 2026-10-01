@@ -5,12 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "mcp-spotify"
 version = "0.2.1"
-description = "MCP server for creating Spotify playlists from artist lists. Wraps the Spotify Web API (OAuth 2.0 authorization-code flow) and exposes tools for search, top-tracks lookup, and playlist creation/curation."
+description = "MCP server for Spotify: catalog search and lookup, playback control, library, and playlist management. Wraps the Spotify Web API (OAuth 2.0 authorization-code flow)."
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [{ name = "Pete Stergion", email = "pstergion@gmail.com" }]
+authors = [{ name = "Pete Stergion" }]
 requires-python = ">=3.11"
-keywords = ["mcp", "spotify", "playlist", "claude", "music"]
+keywords = ["mcp", "spotify", "playlist", "playback", "claude", "music"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

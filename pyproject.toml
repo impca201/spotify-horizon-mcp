@@ -8,7 +8,7 @@ version = "0.2.1"
 description = "MCP server for Spotify: catalog search and lookup, playback control, library, and playlist management. Wraps the Spotify Web API (OAuth 2.0 authorization-code flow)."
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [{ name = "Pete Stergion", email = "pstergion@gmail.com" }]
+authors = [{ name = "Pete Stergion" }]
 requires-python = ">=3.11"
 keywords = ["mcp", "spotify", "playlist", "playback", "claude", "music"]
 classifiers = [
